@@ -9,6 +9,10 @@ import requests
 from datetime import datetime
 import pandas as pd  # type: ignore
 import time
+try:  # Optional charts
+    import altair as alt  # type: ignore
+except Exception:  # pragma: no cover
+    alt = None
 
 # Page configuration
 st.set_page_config(
@@ -199,6 +203,49 @@ def display_overview_metrics(data):
         )
 
 
+def display_executive_summary(data):
+    """Executive summary strip with key KPIs for product owners."""
+    user_data = data.get('user', {})
+    booking = data.get('booking', {})
+    last_30 = booking.get('last_30_days', {})
+    insights = last_30.get('insights', {})
+
+    total_users = user_data.get('total_count', 0) or 0
+    active_users = user_data.get('active_count', 0) or 0
+    inactive_users = user_data.get('inactive_count', 0) or 0
+    new_users_30d = (user_data.get('new_users_30_days') or {}).get('count', 0) or 0
+
+    by_country = user_data.get('by_country') or {}
+    top_country = None
+    if by_country:
+        top_country = max(by_country.items(), key=lambda kv: kv[1].get('total_last_30_days', 0) or 0)[0]
+
+    total_bookings = insights.get('total_last_30d', 0) or 0
+    total_revenue = insights.get('total_revenue_30d', None)
+    avg_booking_value = insights.get('avg_booking_value', None)
+
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    with k1:
+        st.metric("👥 Total Users", f"{total_users:,}")
+    with k2:
+        st.metric("🆕 New Users (30d)", f"{new_users_30d:,}")
+    with k3:
+        st.metric("✅ Active", f"{active_users:,}")
+    with k4:
+        st.metric("❌ Inactive", f"{inactive_users:,}")
+    with k5:
+        st.metric("🧾 Bookings (30d)", f"{total_bookings:,}")
+    with k6:
+        if total_revenue is not None and avg_booking_value is not None:
+            st.metric("💰 Rev / Avg", f"{total_revenue:,.2f} / {avg_booking_value:,.2f}")
+        elif total_revenue is not None:
+            st.metric("💰 Revenue (30d)", f"{total_revenue:,.2f}")
+        elif avg_booking_value is not None:
+            st.metric("💳 Avg booking", f"{avg_booking_value:,.2f}")
+    if top_country:
+        st.caption(f"Top country by new users (30d): {top_country}")
+
+
 def display_time_period_overview(data):
     """Display overview of all time periods broken down by user type"""
     user_data = data.get('user', {})
@@ -335,16 +382,27 @@ def display_country_insights(data):
     with c2:
         st.metric("🆕 New users last 30d (all countries)", f"{total_new_last_30d:,}")
 
+    # Country filter and visuals
+    country_options = list(by_country.keys())
+    selected = st.multiselect("Filter countries", country_options, default=country_options)
+
     # Bar chart: new users last 30 days by country
     rows = []
     for country_code, country_info in by_country.items():
-        rows.append({
-            'Country': country_code,
-            'New Users (30d)': country_info.get('total_last_30_days', 0) or 0
-        })
+        if country_code not in selected:
+            continue
+        rows.append({'Country': country_code, 'New Users (30d)': country_info.get('total_last_30_days', 0) or 0})
     if rows:
         df_by_country = pd.DataFrame(rows).sort_values('New Users (30d)', ascending=False)
-        st.bar_chart(df_by_country.set_index('Country'))
+        if alt:
+            chart = alt.Chart(df_by_country).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                x=alt.X('Country:N', sort='-y'),
+                y=alt.Y('New Users (30d):Q'),
+                tooltip=['Country', 'New Users (30d)']
+            ).interactive()
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.bar_chart(df_by_country.set_index('Country'))
 
     # Breakdown table by type per country
     breakdown_rows = []
@@ -360,8 +418,11 @@ def display_country_insights(data):
             'Total (30d)': customer + artist + business
         })
     if breakdown_rows:
-        df_breakdown = pd.DataFrame(breakdown_rows).sort_values('Total (30d)', ascending=False)
+        df_breakdown = pd.DataFrame(breakdown_rows)
+        df_breakdown = df_breakdown[df_breakdown['Country'].isin(selected)].sort_values('Total (30d)', ascending=False)
         st.dataframe(df_breakdown, use_container_width=True, hide_index=True)
+        csv = df_breakdown.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Download Country Breakdown (CSV)", data=csv, file_name="country_breakdown_30d.csv", mime="text/csv")
 
     # Map of recent signups (uses preview lat/lon when present)
     points = []
@@ -427,11 +488,19 @@ def display_booking_insights(data):
         prefix = f"{currency_label} " if currency_label else ""
         st.metric("💳 Avg booking value", f"{prefix}{avg_value:,.2f}")
 
-    # Status breakdown chart
+    # Status breakdown chart (donut if alt available)
     if by_status:
         status_rows = [{'Status': k, 'Count': v or 0} for k, v in by_status.items()]
-        df_status = pd.DataFrame(status_rows).sort_values('Count', ascending=False)
-        st.bar_chart(df_status.set_index('Status'))
+        df_status = pd.DataFrame(status_rows)
+        if alt:
+            donut = alt.Chart(df_status).mark_arc(innerRadius=60).encode(
+                theta=alt.Theta(field='Count', type='quantitative'),
+                color=alt.Color(field='Status', type='nominal'),
+                tooltip=['Status', 'Count']
+            )
+            st.altair_chart(donut, use_container_width=True)
+        else:
+            st.bar_chart(df_status.set_index('Status'))
 
     # Bookings per day (by from_time)
     if preview:
@@ -442,8 +511,14 @@ def display_booking_insights(data):
                 day = dt[:10]
                 daily_counts[day] = daily_counts.get(day, 0) + 1
         if daily_counts:
-            df_daily = pd.DataFrame(sorted(daily_counts.items()), columns=['Date', 'Bookings']).set_index('Date')
-            st.line_chart(df_daily)
+            df_daily = pd.DataFrame(sorted(daily_counts.items()), columns=['Date', 'Bookings'])
+            if alt:
+                line = alt.Chart(df_daily).mark_line(point=True).encode(
+                    x='Date:T', y='Bookings:Q', tooltip=['Date', 'Bookings']
+                ).interactive()
+                st.altair_chart(line, use_container_width=True)
+            else:
+                st.line_chart(df_daily.set_index('Date'))
 
     # Top service providers by revenue (from preview)
     if preview:
@@ -456,7 +531,13 @@ def display_booking_insights(data):
             top_rows = sorted(provider_rev.items(), key=lambda x: x[1], reverse=True)[:5]
             df_top = pd.DataFrame(top_rows, columns=['Service Provider', 'Revenue']).set_index('Service Provider')
             st.markdown("### 🏆 Top service providers (by revenue)")
-            st.bar_chart(df_top)
+            if alt:
+                bar = alt.Chart(df_top.reset_index()).mark_bar().encode(
+                    x=alt.X('Revenue:Q'), y=alt.Y('Service Provider:N', sort='-x'), tooltip=['Service Provider', 'Revenue']
+                )
+                st.altair_chart(bar, use_container_width=True)
+            else:
+                st.bar_chart(df_top)
 
     # Preview table
     if preview:
@@ -475,6 +556,8 @@ def display_booking_insights(data):
             })
         df_preview = pd.DataFrame(table_rows)
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
+        csv = df_preview.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Download Bookings Preview (CSV)", data=csv, file_name="bookings_preview_30d.csv", mime="text/csv")
 
 def main():
     """Main dashboard function"""
@@ -625,54 +708,47 @@ def main():
     
     data = st.session_state.data
     
-    # Display Overview with environment badge
+    # Header with environment badge
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("## 📈 Overview Metrics")
+        st.markdown("## 📊 Executive Summary")
     with col2:
         env_colors = {
             "Stage": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.3rem 1rem; border-radius: 20px;",
             "Production": "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 0.3rem 1rem; border-radius: 20px;",
             "Local": "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 0.3rem 1rem; border-radius: 20px;"
         }
-        # Get the style for current environment
         overview_style = env_colors.get(st.session_state.environment, env_colors.get("Stage"))
         st.markdown(
             f'<div style="{overview_style}; font-weight: 600;">{st.session_state.environment}</div>',
             unsafe_allow_html=True
         )
-    
-    display_overview_metrics(data)
-    
-    st.markdown("---")
-    
-    # Display Time Period Metrics
-    st.markdown("## 📈 Time Periods")
-    display_time_period_overview(data)
-    
-    st.markdown("---")
-    
-    # Display Metrics by User Type
-    st.markdown("## 👥 User Metrics by Type")
-    
-    type_tab1, type_tab2, type_tab3 = st.tabs(["👤 Customers", "🎨 Artists", "🏢 Businesses"])
-    
-    with type_tab1:
-        display_metrics_by_type(data, 'customer', 'Customers')
-    
-    with type_tab2:
-        display_metrics_by_type(data, 'artist', 'Artists')
-    
-    with type_tab3:
-        display_metrics_by_type(data, 'business', 'Businesses')
-    
-    st.markdown("---")
-    # Country insights
-    display_country_insights(data)
+
+    display_executive_summary(data)
 
     st.markdown("---")
-    # Booking insights
-    display_booking_insights(data)
+
+    # Product-owner friendly tab structure
+    tab_overview, tab_users, tab_countries, tab_bookings = st.tabs([
+        "📈 Overview", "👥 Users", "🌍 Countries", "🧾 Bookings"
+    ])
+
+    with tab_overview:
+        st.markdown("### Time Periods")
+        display_time_period_overview(data)
+    with tab_users:
+        st.markdown("### User Metrics by Type")
+        t1, t2, t3 = st.tabs(["👤 Customers", "🎨 Artists", "🏢 Businesses"])
+        with t1:
+            display_metrics_by_type(data, 'customer', 'Customers')
+        with t2:
+            display_metrics_by_type(data, 'artist', 'Artists')
+        with t3:
+            display_metrics_by_type(data, 'business', 'Businesses')
+    with tab_countries:
+        display_country_insights(data)
+    with tab_bookings:
+        display_booking_insights(data)
 
     # Footer
     st.markdown("---")
