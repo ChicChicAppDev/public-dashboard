@@ -2,11 +2,12 @@
 Streamlit Dashboard for CCA Platform Performance Metrics
 Displays user onboarding metrics from the backend API
 """
+# pylint: disable=import-error
 
-import streamlit as st
+import streamlit as st  # type: ignore
 import requests
 from datetime import datetime
-import pandas as pd
+import pandas as pd  # type: ignore
 import time
 
 # Page configuration
@@ -311,6 +312,170 @@ def display_metrics_by_type(data, user_type, label):
             st.info(f"No {label} users in the last 30 days")
 
 
+def display_country_insights(data):
+    """Display country-based insights from user.by_country."""
+    user_data = data.get('user', {})
+    by_country = user_data.get('by_country') or data.get('by_country') or {}
+
+    st.markdown("## 🌍 Country Insights")
+
+    if not by_country:
+        st.info("No country-based insights available")
+        return
+
+    # Aggregate summary metrics
+    countries = list(by_country.keys())
+    total_new_last_30d = 0
+    for country_code, country_info in by_country.items():
+        total_new_last_30d += country_info.get('total_last_30_days', 0) or 0
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("🌐 Countries represented (last 30d)", f"{len(countries):,}")
+    with c2:
+        st.metric("🆕 New users last 30d (all countries)", f"{total_new_last_30d:,}")
+
+    # Bar chart: new users last 30 days by country
+    rows = []
+    for country_code, country_info in by_country.items():
+        rows.append({
+            'Country': country_code,
+            'New Users (30d)': country_info.get('total_last_30_days', 0) or 0
+        })
+    if rows:
+        df_by_country = pd.DataFrame(rows).sort_values('New Users (30d)', ascending=False)
+        st.bar_chart(df_by_country.set_index('Country'))
+
+    # Breakdown table by type per country
+    breakdown_rows = []
+    for country_code, country_info in by_country.items():
+        customer = (country_info.get('customer') or {}).get('count', 0) or 0
+        artist = (country_info.get('artist') or {}).get('count', 0) or 0
+        business = (country_info.get('business') or {}).get('count', 0) or 0
+        breakdown_rows.append({
+            'Country': country_code,
+            'Customers (30d)': customer,
+            'Artists (30d)': artist,
+            'Businesses (30d)': business,
+            'Total (30d)': customer + artist + business
+        })
+    if breakdown_rows:
+        df_breakdown = pd.DataFrame(breakdown_rows).sort_values('Total (30d)', ascending=False)
+        st.dataframe(df_breakdown, use_container_width=True, hide_index=True)
+
+    # Map of recent signups (uses preview lat/lon when present)
+    points = []
+    for country_code, country_info in by_country.items():
+        for user_type in ['customer', 'artist', 'business']:
+            previews = (country_info.get(user_type) or {}).get('preview') or []
+            for item in previews:
+                lat = item.get('latitude')
+                lon = item.get('longitude')
+                if lat is not None and lon is not None:
+                    points.append({
+                        'lat': lat,
+                        'lon': lon,
+                        'Country': country_code,
+                        'Type': user_type.capitalize(),
+                        'Name': item.get('display_name', 'N/A'),
+                        'Created': (item.get('created') or '')[:19]
+                    })
+    if points:
+        st.markdown("### 🗺️ Recent signups map (last 30d)")
+        df_points = pd.DataFrame(points)
+        st.map(df_points[['lat', 'lon']])
+
+
+def display_booking_insights(data):
+    """Display booking insights for the last 30 days."""
+    booking = data.get('booking', {})
+    last_30 = booking.get('last_30_days', {})
+    insights = last_30.get('insights', {})
+    preview = last_30.get('preview') or []
+
+    st.markdown("## 🧾 Booking Insights")
+
+    if not last_30:
+        st.info("No booking data available")
+        return
+
+    total = insights.get('total_last_30d', len(preview) if isinstance(preview, list) else 0) or 0
+    by_status = insights.get('by_status') or {}
+    total_revenue = insights.get('total_revenue_30d')
+    avg_value = insights.get('avg_booking_value')
+
+    # Identify currency context from preview if consistent
+    currencies = sorted({item.get('currency') for item in preview if item.get('currency')})
+    currency_label = currencies[0] if len(currencies) == 1 else None
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("🧾 Total bookings (30d)", f"{total:,}")
+    with m2:
+        completed = by_status.get('COMPLETED', 0) or 0
+        st.metric("✅ Completed", f"{completed:,}")
+    with m3:
+        booked = by_status.get('BOOKED', 0) or 0
+        st.metric("🗓️ Booked", f"{booked:,}")
+    with m4:
+        if total_revenue is not None:
+            prefix = f"{currency_label} " if currency_label else ""
+            st.metric("💰 Revenue (30d)", f"{prefix}{total_revenue:,.2f}")
+
+    # Average value metric
+    if avg_value is not None:
+        prefix = f"{currency_label} " if currency_label else ""
+        st.metric("💳 Avg booking value", f"{prefix}{avg_value:,.2f}")
+
+    # Status breakdown chart
+    if by_status:
+        status_rows = [{'Status': k, 'Count': v or 0} for k, v in by_status.items()]
+        df_status = pd.DataFrame(status_rows).sort_values('Count', ascending=False)
+        st.bar_chart(df_status.set_index('Status'))
+
+    # Bookings per day (by from_time)
+    if preview:
+        daily_counts = {}
+        for item in preview:
+            dt = item.get('from_time') or item.get('created')
+            if dt:
+                day = dt[:10]
+                daily_counts[day] = daily_counts.get(day, 0) + 1
+        if daily_counts:
+            df_daily = pd.DataFrame(sorted(daily_counts.items()), columns=['Date', 'Bookings']).set_index('Date')
+            st.line_chart(df_daily)
+
+    # Top service providers by revenue (from preview)
+    if preview:
+        provider_rev = {}
+        for item in preview:
+            provider = item.get('service_provider_name') or 'Unknown'
+            price = item.get('total_price') or 0
+            provider_rev[provider] = provider_rev.get(provider, 0) + price
+        if provider_rev:
+            top_rows = sorted(provider_rev.items(), key=lambda x: x[1], reverse=True)[:5]
+            df_top = pd.DataFrame(top_rows, columns=['Service Provider', 'Revenue']).set_index('Service Provider')
+            st.markdown("### 🏆 Top service providers (by revenue)")
+            st.bar_chart(df_top)
+
+    # Preview table
+    if preview:
+        table_rows = []
+        for item in preview:
+            table_rows.append({
+                'Booking ID': (item.get('booking_id') or '')[:8] + '...' if item.get('booking_id') else 'N/A',
+                'Status': item.get('status', 'N/A'),
+                'Type': item.get('type', 'N/A'),
+                'Total Price': item.get('total_price', 0),
+                'Currency': item.get('currency', ''),
+                'From': (item.get('from_time') or '')[:19],
+                'To': (item.get('to_time') or '')[:19],
+                'Customer': item.get('customer_name', 'N/A'),
+                'Provider': item.get('service_provider_name', 'N/A')
+            })
+        df_preview = pd.DataFrame(table_rows)
+        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+
 def main():
     """Main dashboard function"""
     
@@ -501,6 +666,14 @@ def main():
     with type_tab3:
         display_metrics_by_type(data, 'business', 'Businesses')
     
+    st.markdown("---")
+    # Country insights
+    display_country_insights(data)
+
+    st.markdown("---")
+    # Booking insights
+    display_booking_insights(data)
+
     # Footer
     st.markdown("---")
     col1, col2 = st.columns([1, 3])
