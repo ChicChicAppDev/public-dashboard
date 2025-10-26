@@ -17,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS for better styling - Dark Mode Compatible
 st.markdown("""
     <style>
     .main-header {
@@ -31,25 +31,27 @@ st.markdown("""
         padding: 1rem 0;
     }
     .stMetric {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        background: rgba(255, 255, 255, 0.05);
         padding: 1.5rem;
         border-radius: 12px;
-        border: none;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        transition: transform 0.2s;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s;
     }
     .stMetric:hover {
-        transform: translateY(-2px);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        border-color: rgba(102, 126, 234, 0.5);
     }
     .metric-label {
         font-size: 0.9rem;
-        color: #555;
+        color: rgba(255, 255, 255, 0.7);
         font-weight: 600;
     }
     .metric-value {
         font-size: 2rem;
         font-weight: 700;
-        color: #667eea;
+        color: #fff;
     }
     .environment-badge {
         display: inline-block;
@@ -64,11 +66,29 @@ st.markdown("""
         font-weight: 600;
         transition: all 0.3s;
     }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.5rem;
+        border-radius: 8px;
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 8px;
+    }
+    /* Dark theme adjustments */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
+    }
+    .stDataFrame {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+    }
+    h1, h2, h3 {
+        color: #fff !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -207,15 +227,12 @@ def display_time_period_metrics(data, period_key, period_label):
             # Convert to DataFrame for better display
             df_data = []
             for item in preview_data:
-                user_info = item.get('user', {})
-                account_type = item.get('account_type', 'N/A')
+                account_type = item.get('type', 'N/A')
                 df_data.append({
-                    'Type': account_type.replace('_account', '').title(),
-                    'Username': user_info.get('username', 'N/A'),
-                    'Email': user_info.get('email', 'N/A'),
-                    'First Name': user_info.get('first_name', 'N/A'),
-                    'Last Name': user_info.get('last_name', 'N/A'),
-                    'Created': item.get('created', 'N/A')
+                    'Type': account_type.replace('_ACCOUNT', '').title(),
+                    'Display Name': item.get('display_name', 'N/A'),
+                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
+                    'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
                 })
             
             if df_data:
@@ -256,13 +273,11 @@ def display_metrics_by_type(data, user_type, label):
     if preview_data:
         df_data = []
         for item in preview_data:
-            user_info = item.get('user', {})
             df_data.append({
-                'Username': user_info.get('username', 'N/A'),
-                'Email': user_info.get('email', 'N/A'),
-                'First Name': user_info.get('first_name', 'N/A'),
-                'Last Name': user_info.get('last_name', 'N/A'),
-                'Created': item.get('created', 'N/A')
+                'Display Name': item.get('display_name', 'N/A'),
+                'Account ID': item.get('account_id', 'N/A')[:8] + '...',
+                'Type': item.get('type', 'N/A'),
+                'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
             })
         
         if df_data:
@@ -368,7 +383,7 @@ def main():
         st.markdown("---")
         st.markdown("### 📋 Quick Start")
         st.markdown("""
-        <small>
+        <small style="color: rgba(255,255,255,0.7);">
         1. Select environment (Stage/Prod)<br>
         2. Enter API keys<br>
         3. Click "Load Data"<br>
@@ -379,7 +394,7 @@ def main():
         st.markdown("---")
         st.markdown("### ℹ️ About")
         st.markdown("""
-        <small>
+        <small style="color: rgba(255,255,255,0.7);">
         This dashboard provides real-time insights into user onboarding and platform performance metrics.
         </small>
         """, unsafe_allow_html=True)
@@ -392,7 +407,7 @@ def main():
         current_env = st.session_state.environment
         api_url = API_ENDPOINTS.get(current_env, "http://localhost:8000")
         
-        col1, col2, col3 = st.columns([1, 2, 1])
+        col1, col2 = st.columns([1, 3])
         with col2:
             st.info("👈 **Please authenticate using the sidebar to view metrics**")
             st.markdown("---")
@@ -480,10 +495,10 @@ def main():
     
     # Footer
     st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2 = st.columns([1, 3])
     with col2:
         st.markdown(
-            "<div style='text-align: center; color: #666; padding: 1rem;'>"
+            "<div style='text-align: center; color: rgba(255,255,255,0.5); padding: 1rem;'>"
             "<small>© 2024 CCA Platform | Built with Streamlit ⚡</small>"
             "</div>",
             unsafe_allow_html=True
