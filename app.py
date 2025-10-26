@@ -199,26 +199,38 @@ def display_overview_metrics(data):
 
 
 def display_time_period_overview(data):
-    """Display overview of all time periods at once - speed dial style"""
+    """Display overview of all time periods broken down by user type"""
     user_data = data.get('user', {})
+    types_data = user_data.get('types', {})
     
-    # Main time period metrics - speed dial style
-    col1, col2, col3 = st.columns(3)
+    # Period keys and labels
+    periods = [
+        ('new_24_hours', '🕐 Last 24 hours'),
+        ('new_7_days', '📆 Last 7 days'),
+        ('new_30_days', '📅 Last 30 days')
+    ]
     
-    with col1:
-        count = user_data.get('new_users_24_hrs', {}).get('count', 0)
-        st.metric("🕐 24 Hours", f"{count:,}", delta=None)
+    type_info = [
+        ('customer', '👥 Customers Onboarded'),
+        ('artist', '👥 Artists Onboarded'),
+        ('business', '👥 Businesses Onboarded')
+    ]
     
-    with col2:
-        count = user_data.get('new_users_7_days', {}).get('count', 0)
-        st.metric("📆 7 Days", f"{count:,}", delta=None)
-    
-    with col3:
-        count = user_data.get('new_users_30_days', {}).get('count', 0)
-        st.metric("📅 30 Days", f"{count:,}", delta=None)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.caption("💡 Drill down into specific user types using the tabs below for detailed breakdowns")
+    # Create layout for each time period
+    for idx, (period_key, period_label) in enumerate(periods):
+        st.markdown(f"### {period_label}")
+        
+        cols = st.columns(3)
+        for type_idx, (user_type, type_label) in enumerate(type_info):
+            with cols[type_idx]:
+                type_data = types_data.get(user_type, {})
+                period_data = type_data.get(period_key, {})
+                count = period_data.get('count', 0)
+                st.metric(type_label, f"{count:,}", delta=None)
+        
+        # Add spacing between periods
+        if idx < len(periods) - 1:
+            st.markdown("<br>", unsafe_allow_html=True)
 
 
 def display_metrics_by_type(data, user_type, label):
@@ -469,9 +481,8 @@ def main():
     
     st.markdown("---")
     
-    # Display Time Period Metrics - Speed Dial Style
-    st.markdown("## 📅 New User Signups by Time Period")
-    st.markdown("<br>", unsafe_allow_html=True)
+    # Display Time Period Metrics
+    st.markdown("## 📈 Time Periods")
     display_time_period_overview(data)
     
     st.markdown("---")
