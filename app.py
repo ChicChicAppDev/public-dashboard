@@ -51,8 +51,8 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'dashboard_api_key' not in st.session_state:
     st.session_state.dashboard_api_key = ""
-if 'x-api-key' not in st.session_state:
-    st.session_state.x-api-key = ""
+if 'x_api_key' not in st.session_state:
+    st.session_state.x_api_key = ""
 if 'api_url' not in st.session_state:
     st.session_state.api_url = "http://localhost:8000"
 if 'data' not in st.session_state:
@@ -67,21 +67,23 @@ def authenticate():
         st.error("⚠️ Please enter an API key")
         return False
 
-    if not st.session_state.x-api-key:
+    if not st.session_state.x_api_key:
         st.error("⚠️ Please enter an X-API-Key")
         return False
     return True
 
 
-def fetch_data(api_url, api_key):
+def fetch_data(api_url, dashboard_api_key, x_api_key):
     """Fetch data from the API"""
     try:
         # Construct the full URL
         full_url = f"{api_url}/v1/metrics/performance"
         params = {"secure_api_key": dashboard_api_key}
-        headers = {"x-api-key": x-api-key,
-                   "content-type": "application/json",
-                   "accept": "application/json"}
+        headers = {
+            "x-api-key": x_api_key,
+            "content-type": "application/json",
+            "accept": "application/json"
+        }
         
         response = requests.get(full_url, params=params, headers=headers, timeout=10)
         
@@ -242,14 +244,23 @@ def main():
     with st.sidebar:
         st.markdown("## 🔐 Authentication")
         
-        api_key = st.text_input(
-            "Enter API Key",
+        dashboard_api_key = st.text_input(
+            "Dashboard API Key",
             type="password",
-            value=st.session_state.api_key,
+            value=st.session_state.dashboard_api_key,
             help="Enter your secure API key to access the dashboard"
         )
         
-        st.session_state.api_key = api_key
+        st.session_state.dashboard_api_key = dashboard_api_key
+        
+        x_api_key = st.text_input(
+            "X-API-Key",
+            type="password",
+            value=st.session_state.x_api_key,
+            help="Enter your X-API-Key header value"
+        )
+        
+        st.session_state.x_api_key = x_api_key
         
         # API URL configuration
         api_url = st.text_input(
@@ -267,7 +278,11 @@ def main():
             if st.button("🔓 Load Data", type="primary", use_container_width=True):
                 if authenticate():
                     with st.spinner("Fetching data..."):
-                        data = fetch_data(st.session_state.api_url, st.session_state.api_key)
+                        data = fetch_data(
+                            st.session_state.api_url, 
+                            st.session_state.dashboard_api_key, 
+                            st.session_state.x_api_key
+                        )
                         if data:
                             st.session_state.data = data
                             st.session_state.last_fetch = datetime.now()
@@ -279,7 +294,11 @@ def main():
         with col2:
             if st.button("🔄 Refresh", use_container_width=True):
                 with st.spinner("Refreshing..."):
-                    data = fetch_data(st.session_state.api_url, st.session_state.api_key)
+                    data = fetch_data(
+                        st.session_state.api_url, 
+                        st.session_state.dashboard_api_key, 
+                        st.session_state.x_api_key
+                    )
                     if data:
                         st.session_state.data = data
                         st.session_state.last_fetch = datetime.now()
@@ -293,10 +312,11 @@ def main():
         st.markdown("---")
         st.markdown("### 📋 Instructions")
         st.markdown("""
-        1. Enter your secure API key
-        2. Update API URL if needed
-        3. Click "Load Data" button
-        4. View metrics below
+        1. Enter your Dashboard API key
+        2. Enter your X-API-Key header value
+        3. Update API URL if needed
+        4. Click "Load Data" button
+        5. View metrics below
         """)
     
     # Main content
@@ -356,9 +376,9 @@ def main():
     # Footer
     st.markdown("---")
     st.markdown(
-        f"<div style='text-align: center; color: #666; padding: 1rem;'>"
-        f"© 2024 CCA Platform | Built with Streamlit"
-        f"</div>",
+        "<div style='text-align: center; color: #666; padding: 1rem;'>"
+        "© 2024 CCA Platform | Built with Streamlit"
+        "</div>",
         unsafe_allow_html=True
     )
 
