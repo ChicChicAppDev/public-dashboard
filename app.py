@@ -87,8 +87,18 @@ st.markdown("""
         background: rgba(255, 255, 255, 0.03);
         border-radius: 8px;
     }
-    h1, h2, h3 {
+    h1, h2, h3, h4 {
         color: #fff !important;
+    }
+    /* Info boxes styling */
+    .stInfo {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    /* Table styling */
+    [data-testid="stDataFrame"],
+    [data-testid="stDataFrame"] > * {
+        color: rgba(255, 255, 255, 0.9);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -182,64 +192,63 @@ def display_overview_metrics(data):
     
     with col3:
         st.metric(
-            label="❌ Inactive Users",
+            label="❌ Deactivated Users",
             value=f"{user_data.get('inactive_count', 0):,}",
             delta=None
         )
 
 
-def display_time_period_metrics(data, period_key, period_label):
-    """Display metrics for a specific time period"""
+def display_time_period_overview(data):
+    """Display overview of all time periods at once - speed dial style"""
     user_data = data.get('user', {})
-    period_data = user_data.get(period_key, {})
+    types_data = user_data.get('types', {})
     
-    col1, col2 = st.columns([1, 2])
+    # Main time period metrics - speed dial style
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown(f"### {period_label}")
-        count = period_data.get('count', 0)
-        st.markdown(f"**Total New Users:** {count:,}")
-        
-        # Display breakdown
-        types_data = user_data.get('types', {})
-        breakdown = {}
-        for user_type in ['customer', 'artist', 'business']:
-            type_data = types_data.get(user_type, {})
-            period_type_data = {}
-            if period_key == 'new_users_24_hrs':
-                period_type_data = type_data.get('new_24_hours', {})
-            elif period_key == 'new_users_7_days':
-                period_type_data = type_data.get('new_7_days', {})
-            elif period_key == 'new_users_30_days':
-                period_type_data = type_data.get('new_30_days', {})
-            breakdown[user_type] = period_type_data.get('count', 0)
-        
-        # Display breakdown in expander
-        with st.expander("View Breakdown"):
-            st.write(f"**Customer:** {breakdown.get('customer', 0):,}")
-            st.write(f"**Artist:** {breakdown.get('artist', 0):,}")
-            st.write(f"**Business:** {breakdown.get('business', 0):,}")
+        count = user_data.get('new_users_24_hrs', {}).get('count', 0)
+        st.metric("🕐 24 Hours", f"{count:,}", delta=None)
     
     with col2:
-        # Display preview table
-        preview_data = period_data.get('preview', [])
-        if preview_data:
-            # Convert to DataFrame for better display
-            df_data = []
-            for item in preview_data:
-                account_type = item.get('type', 'N/A')
-                df_data.append({
-                    'Type': account_type.replace('_ACCOUNT', '').title(),
-                    'Display Name': item.get('display_name', 'N/A'),
-                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
-                    'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
-                })
-            
-            if df_data:
-                df = pd.DataFrame(df_data)
-                st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No recent users to display")
+        count = user_data.get('new_users_7_days', {}).get('count', 0)
+        st.metric("📆 7 Days", f"{count:,}", delta=None)
+    
+    with col3:
+        count = user_data.get('new_users_30_days', {}).get('count', 0)
+        st.metric("📅 30 Days", f"{count:,}", delta=None)
+    
+    # Breakdown by user type for each time period
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### Breakdown by User Type")
+    
+    # Period keys and labels
+    periods = [
+        ('new_24_hours', '🕐 24H'),
+        ('new_7_days', '📆 7D'),
+        ('new_30_days', '📅 30D')
+    ]
+    
+    type_info = [
+        ('customer', '👤 Customer'),
+        ('artist', '🎨 Artist'),
+        ('business', '🏢 Business')
+    ]
+    
+    # Create a grid layout: 3 rows (periods) × 3 columns (types)
+    for period_idx, (period_key, period_label) in enumerate(periods):
+        st.markdown(f"**{period_label}**")
+        
+        cols = st.columns(3)
+        for type_idx, (user_type, type_label) in enumerate(type_info):
+            with cols[type_idx]:
+                type_data = types_data.get(user_type, {})
+                period_data = type_data.get(period_key, {})
+                count = period_data.get('count', 0)
+                st.metric(type_label, f"{count:,}")
+        
+        if period_idx < len(periods) - 1:
+            st.markdown("<br>", unsafe_allow_html=True)
 
 
 def display_metrics_by_type(data, user_type, label):
@@ -267,24 +276,67 @@ def display_metrics_by_type(data, user_type, label):
         count = period_data.get('count', 0)
         st.metric("30 Days", f"{count:,}")
     
-    # Show preview for 24 hours
-    st.markdown("#### Recent 24 Hours")
-    preview_data = type_data.get('new_24_hours', {}).get('preview', [])
-    if preview_data:
-        df_data = []
-        for item in preview_data:
-            df_data.append({
-                'Display Name': item.get('display_name', 'N/A'),
-                'Account ID': item.get('account_id', 'N/A')[:8] + '...',
-                'Type': item.get('type', 'N/A'),
-                'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
-            })
-        
-        if df_data:
-            df = pd.DataFrame(df_data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info(f"No {user_type} users in the last 24 hours")
+    # Show preview tables for all time periods
+    preview_tabs = st.tabs(["🕐 24 Hours", "📆 7 Days", "📅 30 Days"])
+    
+    with preview_tabs[0]:
+        preview_data = type_data.get('new_24_hours', {}).get('preview', [])
+        if preview_data:
+            df_data = []
+            for item in preview_data:
+                df_data.append({
+                    'Display Name': item.get('display_name', 'N/A'),
+                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
+                    'Type': item.get('type', 'N/A'),
+                    'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
+                })
+            
+            if df_data:
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No {user_type} users in the last 24 hours")
+    
+    with preview_tabs[1]:
+        preview_data = type_data.get('new_7_days', {}).get('preview', [])
+        if preview_data:
+            df_data = []
+            for item in preview_data:
+                df_data.append({
+                    'Display Name': item.get('display_name', 'N/A'),
+                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
+                    'Type': item.get('type', 'N/A'),
+                    'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
+                })
+            
+            if df_data:
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No {user_type} users in the last 7 days")
+    
+    with preview_tabs[2]:
+        preview_data = type_data.get('new_30_days', {}).get('preview', [])
+        if preview_data:
+            df_data = []
+            for item in preview_data:
+                occupation = item.get('occupation', '') if item.get('occupation') else ''
+                slug = item.get('slug', '') if item.get('slug') else ''
+                
+                df_data.append({
+                    'Display Name': item.get('display_name', 'N/A'),
+                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
+                    'Type': item.get('type', 'N/A'),
+                    'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A',
+                    'Occupation': occupation if occupation else 'N/A',
+                    'Slug': slug if slug else 'N/A'
+                })
+            
+            if df_data:
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No {user_type} users in the last 30 days")
 
 
 def main():
@@ -457,22 +509,10 @@ def main():
     
     st.markdown("---")
     
-    # Display Time Period Metrics
+    # Display Time Period Metrics - Speed Dial Style
     st.markdown("## 📅 New User Signups by Time Period")
-    
-    tab1, tab2, tab3 = st.tabs(["🕐 Last 24 Hours", "📆 Last 7 Days", "📅 Last 30 Days"])
-    
-    with tab1:
-        st.markdown("<br>", unsafe_allow_html=True)
-        display_time_period_metrics(data, 'new_users_24_hrs', '🕐 Last 24 Hours')
-    
-    with tab2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        display_time_period_metrics(data, 'new_users_7_days', '📆 Last 7 Days')
-    
-    with tab3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        display_time_period_metrics(data, 'new_users_30_days', '📅 Last 30 Days')
+    st.markdown("<br>", unsafe_allow_html=True)
+    display_time_period_overview(data)
     
     st.markdown("---")
     
