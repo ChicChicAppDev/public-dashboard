@@ -49,8 +49,10 @@ st.markdown("""
 # Session state management
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = ""
+if 'dashboard_api_key' not in st.session_state:
+    st.session_state.dashboard_api_key = ""
+if 'x-api-key' not in st.session_state:
+    st.session_state.x-api-key = ""
 if 'api_url' not in st.session_state:
     st.session_state.api_url = "http://localhost:8000"
 if 'data' not in st.session_state:
@@ -61,10 +63,13 @@ if 'last_fetch' not in st.session_state:
 
 def authenticate():
     """Simple authentication using API key"""
-    if not st.session_state.api_key:
+    if not st.session_state.dashboard_api_key:
         st.error("⚠️ Please enter an API key")
         return False
-    
+
+    if not st.session_state.x-api-key:
+        st.error("⚠️ Please enter an X-API-Key")
+        return False
     return True
 
 
@@ -72,10 +77,13 @@ def fetch_data(api_url, api_key):
     """Fetch data from the API"""
     try:
         # Construct the full URL
-        full_url = f"{api_url}/web/v1/metrics/performance"
-        params = {"secure_api_key": api_key}
+        full_url = f"{api_url}/v1/metrics/performance"
+        params = {"secure_api_key": dashboard_api_key}
+        headers = {"x-api-key": x-api-key,
+                   "content-type": "application/json",
+                   "accept": "application/json"}
         
-        response = requests.get(full_url, params=params, timeout=10)
+        response = requests.get(full_url, params=params, headers=headers, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
