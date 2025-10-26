@@ -21,30 +21,64 @@ st.set_page_config(
 st.markdown("""
     <style>
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
+        font-size: 2.8rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
         margin-bottom: 2rem;
+        padding: 1rem 0;
     }
     .stMetric {
-        background-color: white;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #e0e0e0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .stMetric:hover {
+        transform: translateY(-2px);
     }
     .metric-label {
-        font-size: 0.85rem;
-        color: #666;
+        font-size: 0.9rem;
+        color: #555;
+        font-weight: 600;
     }
     .metric-value {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #1f77b4;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #667eea;
+    }
+    .environment-badge {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin: 0.5rem 0;
+    }
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
     }
     </style>
 """, unsafe_allow_html=True)
+
+# API Endpoints
+API_ENDPOINTS = {
+    "Stage": "https://web.stage.apichicchic.com",
+    "Production": "https://web.prod.apichicchic.com",
+    "Local": "http://localhost:8000"
+}
 
 # Session state management
 if 'authenticated' not in st.session_state:
@@ -53,8 +87,8 @@ if 'dashboard_api_key' not in st.session_state:
     st.session_state.dashboard_api_key = ""
 if 'x_api_key' not in st.session_state:
     st.session_state.x_api_key = ""
-if 'api_url' not in st.session_state:
-    st.session_state.api_url = "http://localhost:8000"
+if 'environment' not in st.session_state:
+    st.session_state.environment = "Stage"
 if 'data' not in st.session_state:
     st.session_state.data = None
 if 'last_fetch' not in st.session_state:
@@ -85,7 +119,7 @@ def fetch_data(api_url, dashboard_api_key, x_api_key):
             "accept": "application/json"
         }
         
-        response = requests.get(full_url, params=params, headers=headers, timeout=10)
+        response = requests.get(full_url, params=params, headers=headers, timeout=15)
         
         if response.status_code == 200:
             data = response.json()
@@ -109,25 +143,26 @@ def display_overview_metrics(data):
     """Display overview metrics at the top"""
     user_data = data.get('user', {})
     
+    st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric(
-            label="Total Users",
+            label="👥 Total Users",
             value=f"{user_data.get('total_count', 0):,}",
             delta=None
         )
     
     with col2:
         st.metric(
-            label="Active Users",
+            label="✅ Active Users",
             value=f"{user_data.get('active_count', 0):,}",
             delta=None
         )
     
     with col3:
         st.metric(
-            label="Inactive Users",
+            label="❌ Inactive Users",
             value=f"{user_data.get('inactive_count', 0):,}",
             delta=None
         )
@@ -243,6 +278,35 @@ def main():
     # Sidebar for authentication
     with st.sidebar:
         st.markdown("## 🔐 Authentication")
+        st.markdown("---")
+        
+        # Environment selection
+        st.markdown("### 🌍 Environment")
+        environment = st.radio(
+            "Select Environment",
+            options=["Stage", "Production", "Local"],
+            index=["Stage", "Production", "Local"].index(st.session_state.environment) if st.session_state.environment in ["Stage", "Production", "Local"] else 0,
+            help="Choose the API environment"
+        )
+        st.session_state.environment = environment
+        
+        # Get the API URL based on selected environment
+        api_url = API_ENDPOINTS.get(environment, "http://localhost:8000")
+        
+        # Display environment badge
+        env_colors = {
+            "Stage": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;",
+            "Production": "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;",
+            "Local": "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;"
+        }
+        current_style = env_colors.get(environment, env_colors.get("Stage"))
+        st.markdown(
+            f'<div class="environment-badge" style="{current_style}">{environment}</div>',
+            unsafe_allow_html=True
+        )
+        
+        st.markdown("---")
+        st.markdown("### 🔑 API Credentials")
         
         dashboard_api_key = st.text_input(
             "Dashboard API Key",
@@ -254,21 +318,13 @@ def main():
         st.session_state.dashboard_api_key = dashboard_api_key
         
         x_api_key = st.text_input(
-            "X-API-Key",
+            "X-API-Key Header",
             type="password",
             value=st.session_state.x_api_key,
             help="Enter your X-API-Key header value"
         )
         
         st.session_state.x_api_key = x_api_key
-        
-        # API URL configuration
-        api_url = st.text_input(
-            "API Base URL",
-            value=st.session_state.api_url,
-            help="Backend API base URL (e.g., http://localhost:8000)"
-        )
-        st.session_state.api_url = api_url
         
         st.markdown("---")
         
@@ -279,7 +335,7 @@ def main():
                 if authenticate():
                     with st.spinner("Fetching data..."):
                         data = fetch_data(
-                            st.session_state.api_url, 
+                            api_url, 
                             st.session_state.dashboard_api_key, 
                             st.session_state.x_api_key
                         )
@@ -295,7 +351,7 @@ def main():
             if st.button("🔄 Refresh", use_container_width=True):
                 with st.spinner("Refreshing..."):
                     data = fetch_data(
-                        st.session_state.api_url, 
+                        api_url, 
                         st.session_state.dashboard_api_key, 
                         st.session_state.x_api_key
                     )
@@ -310,35 +366,78 @@ def main():
             st.markdown(f"**Last Updated:** {st.session_state.last_fetch.strftime('%Y-%m-%d %H:%M:%S')}")
         
         st.markdown("---")
-        st.markdown("### 📋 Instructions")
+        st.markdown("### 📋 Quick Start")
         st.markdown("""
-        1. Enter your Dashboard API key
-        2. Enter your X-API-Key header value
-        3. Update API URL if needed
-        4. Click "Load Data" button
-        5. View metrics below
-        """)
+        <small>
+        1. Select environment (Stage/Prod)<br>
+        2. Enter API keys<br>
+        3. Click "Load Data"<br>
+        4. Explore metrics
+        </small>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("### ℹ️ About")
+        st.markdown("""
+        <small>
+        This dashboard provides real-time insights into user onboarding and platform performance metrics.
+        </small>
+        """, unsafe_allow_html=True)
     
     # Main content
-    st.markdown('<h1 class="main-header">📊 CCA Platform Performance Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">📊 CCA Platform Dashboard</h1>', unsafe_allow_html=True)
     
     if not st.session_state.authenticated or not st.session_state.data:
-        st.info("👈 Please authenticate using the sidebar to view metrics")
-        st.markdown("---")
-        st.markdown("""
-        ### What this dashboard shows:
-        - **Total Users**: Complete user count across all types
-        - **Active/Inactive Users**: User status breakdown
-        - **New Signups**: Recent user registrations by time period
-        - **User Types**: Breakdown by Customer, Artist, and Business accounts
-        - **Recent Users**: Preview of latest signups with details
-        """)
+        # Get the current API URL
+        current_env = st.session_state.environment
+        api_url = API_ENDPOINTS.get(current_env, "http://localhost:8000")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.info("👈 **Please authenticate using the sidebar to view metrics**")
+            st.markdown("---")
+            
+            st.markdown("""
+            ### 📊 Dashboard Features:
+            
+            - **📈 Overview Metrics**: Total, active, and inactive user counts
+            - **⏰ Time-based Analysis**: User signups for 24h, 7d, and 30d periods
+            - **👥 User Type Breakdown**: Separate metrics for Customers, Artists, and Businesses
+            - **👤 Recent Signups Preview**: Latest user registrations with details
+            - **🔄 Live Updates**: Refresh data in real-time
+            
+            ### 🎯 Current Environment:
+            """)
+            
+            env_colors = {
+                "Stage": "🎨 Stage Environment",
+                "Production": "🚀 Production Environment", 
+                "Local": "💻 Local Environment"
+            }
+            
+            st.success(f"**{env_colors.get(current_env, 'Stage')}**")
+            st.caption(f"Endpoint: `{api_url}`")
         return
     
     data = st.session_state.data
     
-    # Display Overview
-    st.markdown("## 📈 Overview")
+    # Display Overview with environment badge
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("## 📈 Overview Metrics")
+    with col2:
+        env_colors = {
+            "Stage": "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.3rem 1rem; border-radius: 20px;",
+            "Production": "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 0.3rem 1rem; border-radius: 20px;",
+            "Local": "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 0.3rem 1rem; border-radius: 20px;"
+        }
+        # Get the style for current environment
+        overview_style = env_colors.get(st.session_state.environment, env_colors.get("Stage"))
+        st.markdown(
+            f'<div style="{overview_style}; font-weight: 600;">{st.session_state.environment}</div>',
+            unsafe_allow_html=True
+        )
+    
     display_overview_metrics(data)
     
     st.markdown("---")
@@ -349,12 +448,15 @@ def main():
     tab1, tab2, tab3 = st.tabs(["🕐 Last 24 Hours", "📆 Last 7 Days", "📅 Last 30 Days"])
     
     with tab1:
+        st.markdown("<br>", unsafe_allow_html=True)
         display_time_period_metrics(data, 'new_users_24_hrs', '🕐 Last 24 Hours')
     
     with tab2:
+        st.markdown("<br>", unsafe_allow_html=True)
         display_time_period_metrics(data, 'new_users_7_days', '📆 Last 7 Days')
     
     with tab3:
+        st.markdown("<br>", unsafe_allow_html=True)
         display_time_period_metrics(data, 'new_users_30_days', '📅 Last 30 Days')
     
     st.markdown("---")
@@ -365,22 +467,27 @@ def main():
     type_tab1, type_tab2, type_tab3 = st.tabs(["👤 Customers", "🎨 Artists", "🏢 Businesses"])
     
     with type_tab1:
+        st.markdown("<br>", unsafe_allow_html=True)
         display_metrics_by_type(data, 'customer', '👤 Customer Metrics')
     
     with type_tab2:
+        st.markdown("<br>", unsafe_allow_html=True)
         display_metrics_by_type(data, 'artist', '🎨 Artist Metrics')
     
     with type_tab3:
+        st.markdown("<br>", unsafe_allow_html=True)
         display_metrics_by_type(data, 'business', '🏢 Business Metrics')
     
     # Footer
     st.markdown("---")
-    st.markdown(
-        "<div style='text-align: center; color: #666; padding: 1rem;'>"
-        "© 2024 CCA Platform | Built with Streamlit"
-        "</div>",
-        unsafe_allow_html=True
-    )
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            "<div style='text-align: center; color: #666; padding: 1rem;'>"
+            "<small>© 2024 CCA Platform | Built with Streamlit ⚡</small>"
+            "</div>",
+            unsafe_allow_html=True
+        )
 
 
 if __name__ == "__main__":
