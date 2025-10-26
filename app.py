@@ -201,7 +201,6 @@ def display_overview_metrics(data):
 def display_time_period_overview(data):
     """Display overview of all time periods at once - speed dial style"""
     user_data = data.get('user', {})
-    types_data = user_data.get('types', {})
     
     # Main time period metrics - speed dial style
     col1, col2, col3 = st.columns(3)
@@ -218,37 +217,8 @@ def display_time_period_overview(data):
         count = user_data.get('new_users_30_days', {}).get('count', 0)
         st.metric("📅 30 Days", f"{count:,}", delta=None)
     
-    # Breakdown by user type for each time period
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### Breakdown by User Type")
-    
-    # Period keys and labels
-    periods = [
-        ('new_24_hours', '🕐 24H'),
-        ('new_7_days', '📆 7D'),
-        ('new_30_days', '📅 30D')
-    ]
-    
-    type_info = [
-        ('customer', '👤 Customer'),
-        ('artist', '🎨 Artist'),
-        ('business', '🏢 Business')
-    ]
-    
-    # Create a grid layout: 3 rows (periods) × 3 columns (types)
-    for period_idx, (period_key, period_label) in enumerate(periods):
-        st.markdown(f"**{period_label}**")
-        
-        cols = st.columns(3)
-        for type_idx, (user_type, type_label) in enumerate(type_info):
-            with cols[type_idx]:
-                type_data = types_data.get(user_type, {})
-                period_data = type_data.get(period_key, {})
-                count = period_data.get('count', 0)
-                st.metric(type_label, f"{count:,}")
-        
-        if period_idx < len(periods) - 1:
-            st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("💡 Drill down into specific user types using the tabs below for detailed breakdowns")
 
 
 def display_metrics_by_type(data, user_type, label):
@@ -257,37 +227,21 @@ def display_metrics_by_type(data, user_type, label):
     types_data = user_data.get('types', {})
     type_data = types_data.get(user_type, {})
     
-    st.markdown(f"### {label}")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        period_data = type_data.get('new_24_hours', {})
-        count = period_data.get('count', 0)
-        st.metric("24 Hours", f"{count:,}")
-    
-    with col2:
-        period_data = type_data.get('new_7_days', {})
-        count = period_data.get('count', 0)
-        st.metric("7 Days", f"{count:,}")
-    
-    with col3:
-        period_data = type_data.get('new_30_days', {})
-        count = period_data.get('count', 0)
-        st.metric("30 Days", f"{count:,}")
-    
-    # Show preview tables for all time periods
+    # Show preview tables for all time periods with metrics inline
     preview_tabs = st.tabs(["🕐 24 Hours", "📆 7 Days", "📅 30 Days"])
     
     with preview_tabs[0]:
-        preview_data = type_data.get('new_24_hours', {}).get('preview', [])
+        period_data = type_data.get('new_24_hours', {})
+        count = period_data.get('count', 0)
+        st.metric(f"📊 New {label} - 24 Hours", f"{count:,}", delta=None)
+        
+        preview_data = period_data.get('preview', [])
         if preview_data:
             df_data = []
             for item in preview_data:
                 df_data.append({
                     'Display Name': item.get('display_name', 'N/A'),
-                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
-                    'Type': item.get('type', 'N/A'),
+                    'User ID': item.get('user_id', 'N/A')[:8] + '...' if len(item.get('user_id', '')) > 8 else item.get('user_id', 'N/A'),
                     'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
                 })
             
@@ -295,17 +249,20 @@ def display_metrics_by_type(data, user_type, label):
                 df = pd.DataFrame(df_data)
                 st.dataframe(df, use_container_width=True, hide_index=True)
         else:
-            st.info(f"No {user_type} users in the last 24 hours")
+            st.info(f"No {label} users in the last 24 hours")
     
     with preview_tabs[1]:
-        preview_data = type_data.get('new_7_days', {}).get('preview', [])
+        period_data = type_data.get('new_7_days', {})
+        count = period_data.get('count', 0)
+        st.metric(f"📊 New {label} - 7 Days", f"{count:,}", delta=None)
+        
+        preview_data = period_data.get('preview', [])
         if preview_data:
             df_data = []
             for item in preview_data:
                 df_data.append({
                     'Display Name': item.get('display_name', 'N/A'),
-                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
-                    'Type': item.get('type', 'N/A'),
+                    'User ID': item.get('user_id', 'N/A')[:8] + '...' if len(item.get('user_id', '')) > 8 else item.get('user_id', 'N/A'),
                     'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A'
                 })
             
@@ -313,10 +270,14 @@ def display_metrics_by_type(data, user_type, label):
                 df = pd.DataFrame(df_data)
                 st.dataframe(df, use_container_width=True, hide_index=True)
         else:
-            st.info(f"No {user_type} users in the last 7 days")
+            st.info(f"No {label} users in the last 7 days")
     
     with preview_tabs[2]:
-        preview_data = type_data.get('new_30_days', {}).get('preview', [])
+        period_data = type_data.get('new_30_days', {})
+        count = period_data.get('count', 0)
+        st.metric(f"📊 New {label} - 30 Days", f"{count:,}", delta=None)
+        
+        preview_data = period_data.get('preview', [])
         if preview_data:
             df_data = []
             for item in preview_data:
@@ -325,8 +286,7 @@ def display_metrics_by_type(data, user_type, label):
                 
                 df_data.append({
                     'Display Name': item.get('display_name', 'N/A'),
-                    'Account ID': item.get('account_id', 'N/A')[:8] + '...',
-                    'Type': item.get('type', 'N/A'),
+                    'User ID': item.get('user_id', 'N/A')[:8] + '...' if len(item.get('user_id', '')) > 8 else item.get('user_id', 'N/A'),
                     'Created': item.get('created', 'N/A')[:10] if item.get('created') != 'N/A' else 'N/A',
                     'Occupation': occupation if occupation else 'N/A',
                     'Slug': slug if slug else 'N/A'
@@ -336,7 +296,7 @@ def display_metrics_by_type(data, user_type, label):
                 df = pd.DataFrame(df_data)
                 st.dataframe(df, use_container_width=True, hide_index=True)
         else:
-            st.info(f"No {user_type} users in the last 30 days")
+            st.info(f"No {label} users in the last 30 days")
 
 
 def main():
@@ -522,16 +482,13 @@ def main():
     type_tab1, type_tab2, type_tab3 = st.tabs(["👤 Customers", "🎨 Artists", "🏢 Businesses"])
     
     with type_tab1:
-        st.markdown("<br>", unsafe_allow_html=True)
-        display_metrics_by_type(data, 'customer', '👤 Customer Metrics')
+        display_metrics_by_type(data, 'customer', 'Customers')
     
     with type_tab2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        display_metrics_by_type(data, 'artist', '🎨 Artist Metrics')
+        display_metrics_by_type(data, 'artist', 'Artists')
     
     with type_tab3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        display_metrics_by_type(data, 'business', '🏢 Business Metrics')
+        display_metrics_by_type(data, 'business', 'Businesses')
     
     # Footer
     st.markdown("---")
