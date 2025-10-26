@@ -67,17 +67,18 @@ try:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
+        total_customers = len(filtered_df)
         st.metric(
             label="Total Customers",
-            value=len(filtered_df),
-            delta=f"{len(filtered_df) - len(df) if selected_plan != 'All' else len(filtered_df)}"
+            value=total_customers
         )
     
     with col2:
         # Calculate average customers per month
         if len(filtered_df) > 0:
-            months = (filtered_df['date'].max() - filtered_df['date'].min()).days / 30.44
-            avg_per_month = len(filtered_df) / months if months > 0 else len(filtered_df)
+            date_diff = (filtered_df['date'].max() - filtered_df['date'].min()).days
+            months = date_diff / 30.44 if date_diff > 0 else 1
+            avg_per_month = len(filtered_df) / months
             st.metric(
                 label="Avg Customers/Month",
                 value=f"{avg_per_month:.1f}"
@@ -98,7 +99,7 @@ try:
         # Latest customer
         if len(filtered_df) > 0:
             latest_customer = filtered_df.sort_values('date', ascending=False).iloc[0]
-            days_ago = (datetime.now() - latest_customer['date']).days
+            days_ago = (pd.Timestamp.now() - latest_customer['date']).days
             st.metric(
                 label="Latest Customer",
                 value=latest_customer['customer_name'],
